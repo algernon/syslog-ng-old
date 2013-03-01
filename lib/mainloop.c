@@ -33,6 +33,7 @@
 #include "dnscache.h"
 #include "tls-support.h"
 #include "scratch-buffers.h"
+#include "config.h"
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -44,6 +45,12 @@
 #include <iv_signal.h>
 #include <iv_work.h>
 #include <iv_event.h>
+
+#if ENABLE_SYSTEMD
+#include <systemd/sd-daemon.h>
+#else
+#define sd_notify(...)
+#endif
 
 /**
  * Processing model
@@ -506,10 +513,12 @@ main_loop_reload_config_apply(void)
       main_loop_new_config->persist = NULL;
       cfg_free(main_loop_old_config);
       current_configuration = main_loop_new_config;
+      sd_notify(0, "STATUS=");
     }
   else
     {
       msg_error("Error initializing new configuration, reverting to old config", NULL);
+      sd_notify(0, "STATUS=Error initializing new configuration, using the old config");
       cfg_persist_config_move(main_loop_new_config, main_loop_old_config);
       if (!cfg_init(main_loop_old_config))
         {
@@ -548,6 +557,8 @@ main_loop_reload_config_apply(void)
 void
 main_loop_reload_config_initiate(void)
 {
+  sd_notify(0, "STATUS=Reloading configuration");
+
   if (main_loop_new_config)
     {
       /* This block is entered only if this function is reentered before
@@ -559,6 +570,7 @@ main_loop_reload_config_initiate(void)
       cfg_free(main_loop_new_config);
       main_loop_new_config = NULL;
     }
+
   main_loop_old_config = current_configuration;
   app_pre_config_loaded();
   main_loop_new_config = cfg_new(0);
@@ -570,6 +582,7 @@ main_loop_reload_config_initiate(void)
       msg_error("Error parsing configuration",
                 evt_tag_str(EVT_TAG_FILENAME, cfgfilename),
                 NULL);
+      sd_notify(0, "STATUS=Error parsing new configuration, using the old config");
       return;
     }
   main_loop_io_worker_sync_call(main_loop_reload_config_apply);
@@ -700,6 +713,7 @@ main_loop_run(void)
   msg_notice("syslog-ng starting up",
              evt_tag_str("version", VERSION),
              NULL);
+  sd_notify(0, "STATUS=starting up");
 
   IV_TIMER_INIT(&stats_timer);
   stats_timer.handler = stats_timer_elapsed;
@@ -734,7 +748,10 @@ main_loop_run(void)
   stats_timer_kickoff(current_configuration);
 
   /* main loop */
+  sd_notify(0, "STATUS=");
+  sd_notify(0, "READY=1");
   iv_main();
+  sd_notify(0, "STATUS=Shutting down");
 
   control_destroy();
 
