@@ -42,6 +42,9 @@
 #include <time.h>
 #include <stdlib.h>
 
+#define DEFAULT_DW_REOPEN_FLAGS (O_WRONLY | O_CREAT | O_NOCTTY | O_NONBLOCK | O_LARGEFILE)
+#define DEFAULT_DW_REOPEN_FLAGS_PIPE (O_RDWR | O_NOCTTY | O_NONBLOCK | O_LARGEFILE)
+
 /*
  * Threading notes:
  *
@@ -142,10 +145,34 @@ affile_dw_reap(gpointer s)
     }
 }
 
+static inline FileOpenOptions*
+_affile_dw_init_reopen_file_options(AFFileDestWriter *self, FileOpenOptions *opts)
+{
+  opts->is_pipe = self->owner->is_pipe;
+  opts->create_dirs = self->owner->create_dirs;
+  opts->perm_options = &self->owner->file_perm_options;
+  opts->needs_privileges = FALSE;
+
+  if (opts->is_pipe)
+    opts->open_flags = DEFAULT_DW_REOPEN_FLAGS_PIPE;
+  else
+    opts->open_flags = DEFAULT_DW_REOPEN_FLAGS;
+
+  return opts;
+}
+
+static gboolean
+_affile_dw_reopen_file(AFFileDestWriter *self, gchar *name, gint *fd)
+{
+  FileOpenOptions opts;
+
+  return  affile_open_file(name, _affile_dw_init_reopen_file_options(self, &opts), fd);
+}
+
 static gboolean
 affile_dw_reopen(AFFileDestWriter *self)
 {
-  int fd, flags;
+  int fd;
   struct stat st;
 
   self->last_open_stamp = self->last_msg_stamp;
@@ -160,14 +187,7 @@ affile_dw_reopen(AFFileDestWriter *self)
       unlink(self->filename);
     }
 
-  if (self->owner->is_pipe)
-    flags = O_RDWR | O_NOCTTY | O_NONBLOCK | O_LARGEFILE;
-  else
-    flags = O_WRONLY | O_CREAT | O_NOCTTY | O_NONBLOCK | O_LARGEFILE | O_APPEND;
-
-
-  if (affile_open_file(self->filename, flags, &self->owner->file_perm_options,
-                       self->owner->create_dirs, FALSE, self->owner->is_pipe, &fd))
+  if (_affile_dw_reopen_file(self, self->filename, &fd))
     {
       log_writer_reopen(self->writer,
                         self->owner->is_pipe
@@ -186,6 +206,7 @@ affile_dw_reopen(AFFileDestWriter *self)
                 NULL);
       return self->owner->super.super.optional;
     }
+
   return TRUE;
 }
 
