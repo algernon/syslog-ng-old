@@ -47,6 +47,9 @@
 #include <time.h>
 #include <stdlib.h>
 
+#define DEFAULT_SD_OPEN_FLAGS (O_RDONLY | O_NOCTTY | O_NONBLOCK | O_LARGEFILE)
+#define DEFAULT_SD_OPEN_FLAGS_PIPE (O_RDWR | O_NOCTTY | O_NONBLOCK | O_LARGEFILE)
+
 gboolean
 affile_sd_set_multi_line_mode(LogDriver *s, const gchar *mode)
 {
@@ -119,21 +122,27 @@ affile_is_device_node(const gchar *filename)
   return !S_ISREG(st.st_mode);
 }
 
-static gboolean
+static inline FileOpenOptions*
+_affile_sd_init_file_open_options(AFFileSourceDriver *self, FileOpenOptions *opts)
+{
+  opts->create_dirs = FALSE;
+  opts->perm_options = NULL;
+  opts->is_pipe = self->is_pipe;
+
+  if (opts->is_pipe)
+    opts->open_flags = DEFAULT_SD_OPEN_FLAGS_PIPE;
+  else
+    opts->open_flags = DEFAULT_SD_OPEN_FLAGS;
+
+  return opts;
+}
+
+gboolean
 affile_sd_open_file(AFFileSourceDriver *self, gchar *name, gint *fd)
 {
-  gint flags;
-  
-  if (self->is_pipe)
-    flags = O_RDWR | O_NOCTTY | O_NONBLOCK | O_LARGEFILE;
-  else
-    flags = O_RDONLY | O_NOCTTY | O_NONBLOCK | O_LARGEFILE;
+  FileOpenOptions opts;
 
-  if (affile_open_file(name, flags,
-                       &self->file_perm_options,
-                       0, self->is_privileged, self->is_pipe, fd))
-    return TRUE;
-  return FALSE;
+  return affile_open_file(name, _affile_sd_init_file_open_options(self, &opts), fd);
 }
 
 static inline gchar *

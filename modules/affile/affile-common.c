@@ -34,24 +34,32 @@
 #include <time.h>
 #include <stdlib.h>
 
-gboolean
-affile_open_file(gchar *name, gint flags,
-                 const FilePermOptions *perm_options,
-                 gboolean create_dirs, gboolean privileged, gboolean is_pipe, gint *fd)
+static const gchar* spurious_paths[] = {"../", "/..", NULL};
+
+static inline gboolean
+_string_contains_fragment(const gchar *str, const gchar *fragments[])
 {
-  cap_t saved_caps;
-  struct stat st;
+  int i;
 
-  if (strstr(name, "../") || strstr(name, "/..")) 
-    {
-      msg_error("Spurious path, logfile not created",
-                evt_tag_str("path", name),
-                NULL);
-      return FALSE;
-    }
+  for (i=0; i < sizeof(fragments) / sizeof(gchar *); i++)
+  {
+    if (strstr(str, fragments[i]))
+      return TRUE;
+  }
+  
+  return FALSE;
+}
 
-  saved_caps = g_process_cap_save();
-  if (privileged)
+static inline gboolean
+_path_is_spurious(const gchar *name, const gchar *spurious_paths[])
+{
+  return _string_contains_fragment(name, spurious_paths);
+}
+
+static inline gboolean
+_affile_set_caps(gchar *name, FileOpenOptions *opts, cap_t *act_caps)
+{
+  if (opts->needs_privileges)
     {
       g_process_cap_modify(CAP_DAC_READ_SEARCH, TRUE);
       g_process_cap_modify(CAP_SYSLOG, TRUE);
@@ -61,49 +69,103 @@ affile_open_file(gchar *name, gint flags,
       g_process_cap_modify(CAP_DAC_OVERRIDE, TRUE);
     }
 
-  if (create_dirs && perm_options && !file_perm_options_create_containing_directory(perm_options, name))
+  if (opts->create_dirs && opts->perm_options &&
+      !file_perm_options_create_containing_directory(opts->perm_options, name))
     {
-      g_process_cap_restore(saved_caps);
       return FALSE;
     }
 
-  *fd = -1;
+  return TRUE;
+}
+
+static inline void
+_affile_set_fd_permission(FileOpenOptions *opts, int fd)
+{
+  if (fd != -1)
+    {
+      g_fd_set_cloexec(fd, TRUE);
+
+      g_process_cap_modify(CAP_CHOWN, TRUE);
+      g_process_cap_modify(CAP_FOWNER, TRUE);
+      if (opts->perm_options)
+        file_perm_options_apply_fd(opts->perm_options, fd);
+    }
+}
+
+static inline int
+_affile_open_fd(const gchar *name, FileOpenOptions *opts)
+{
+  int fd;
+
+  fd = open(name, opts->open_flags,
+            (!opts->perm_options || (opts->perm_options->file_perm < 0))
+            ? 0600
+            : opts->perm_options->file_perm);
+
+  if (opts->is_pipe && fd < 0 && errno == ENOENT)
+    {
+      if (mkfifo(name, 0666) >= 0)
+        fd = open(name, opts->open_flags, 0600);
+    }
+
+  return fd;
+}
+
+static inline void
+_affile_check_file_type(const gchar *name, FileOpenOptions *opts)
+{
+  struct stat st;
+
   if (stat(name, &st) >= 0)
     {
-      if (is_pipe && !S_ISFIFO(st.st_mode))
+      if (opts->is_pipe && !S_ISFIFO(st.st_mode))
         {
           msg_warning("WARNING: you are using the pipe driver, underlying file is not a FIFO, it should be used by file()",
                     evt_tag_str("filename", name),
                     NULL);
         }
-      else if (!is_pipe && S_ISFIFO(st.st_mode))
+      else if (!opts->is_pipe && S_ISFIFO(st.st_mode))
         {
           msg_warning("WARNING: you are using the file driver, underlying file is a FIFO, it should be used by pipe()",
                       evt_tag_str("filename", name),
                       NULL);
         }
     }
-  *fd = open(name, flags, perm_options->file_perm < 0 ? 0600 : perm_options->file_perm);
-  if (is_pipe && *fd < 0 && errno == ENOENT)
+}
+
+gboolean
+affile_open_file(gchar *name, FileOpenOptions *opts, gint *fd)
+{
+  cap_t saved_caps;
+
+  if (_path_is_spurious(name, spurious_paths))
     {
-      if (mkfifo(name, 0666) >= 0)
-        *fd = open(name, flags, 0666);
+      msg_error("Spurious path, logfile not created",
+                 evt_tag_str("path", name),
+                 NULL);
+      return FALSE;
     }
 
-  if (*fd != -1)
+  saved_caps = g_process_cap_save();
+
+  if (!_affile_set_caps(name, opts, &saved_caps))
     {
-      g_fd_set_cloexec(*fd, TRUE);
-      
-      g_process_cap_modify(CAP_CHOWN, TRUE);
-      g_process_cap_modify(CAP_FOWNER, TRUE);
-      if (perm_options)
-        file_perm_options_apply_fd(perm_options, *fd);
+      g_process_cap_restore(saved_caps);
+      return FALSE;
     }
+
+  _affile_check_file_type(name, opts);
+
+  *fd = _affile_open_fd(name, opts);
+
+  _affile_set_fd_permission(opts, *fd);
+
   g_process_cap_restore(saved_caps);
+
   msg_trace("affile_open_file",
             evt_tag_str("path", name),
-            evt_tag_int("fd",*fd),
+            evt_tag_int("fd", fd),
             NULL);
 
-  return *fd != -1;
+  return (*fd != -1);
 }
