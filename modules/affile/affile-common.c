@@ -105,7 +105,7 @@ _affile_open_fd(const gchar *name, FileOpenOptions *opts)
   if (opts->is_pipe && fd < 0 && errno == ENOENT)
     {
       if (mkfifo(name, 0666) >= 0)
-        fd = open(name, opts->open_flags, 0666);
+        fd = open(name, opts->open_flags, 0600);
     }
 
   return fd;
