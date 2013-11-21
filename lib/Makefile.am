@@ -13,14 +13,27 @@ lib_libsyslog_ng_la_LDFLAGS		= -no-undefined -release @VERSION@
 
 lib_test_subdirs			= lib_filter lib_logproto lib_parser lib_rewrite lib_template
 
+
+lib_libsyslog_ng_la_DEPENDENCIES    =
+
 if IVYKIS_INTERNAL
-lib_libsyslog_ng_la_DEPENDENCIES	= lib/ivykis/src/libivykis.la
+lib_libsyslog_ng_la_DEPENDENCIES	+= lib/ivykis/src/libivykis.la
 
 lib/ivykis/src/libivykis.la:
 	${MAKE} -C lib/ivykis
 
 CLEAN_SUBDIRS				+= @IVYKIS_SUBDIRS@
 endif
+
+if JSON_INTERNAL
+lib_libsyslog_ng_la_DEPENDENCIES	+= lib/jsonc/libjson-c.la
+
+lib/jsonc/libjson-c.la:
+	${MAKE} -C lib/jsonc
+
+CLEAN_SUBDIRS				+= @JSON_SUBDIRS@
+endif
+
 
 # this is intentionally formatted so conflicts are less likely to arise. one name in every line.
 pkginclude_HEADERS			+= \
@@ -52,6 +65,7 @@ pkginclude_HEADERS			+= \
 	lib/logmatcher.h		\
 	lib/logmpx.h			\
 	lib/logmsg.h			\
+	lib/logmsg-serialize.h			\
 	lib/logpipe.h			\
 	lib/logqueue-fifo.h		\
 	lib/logqueue.h			\
@@ -71,6 +85,8 @@ pkginclude_HEADERS			+= \
 	lib/ml-batched-timer.h		\
 	lib/msg-format.h		\
 	lib/nvtable.h			\
+	lib/nvtable-serialize.h			\
+	lib/nvcontainer.h			\
 	lib/parse-number.h		\
 	lib/persist-state.h		\
 	lib/plugin.h			\
@@ -79,12 +95,15 @@ pkginclude_HEADERS			+= \
 	lib/poll-fd-events.h		\
 	lib/pragma-parser.h		\
 	lib/reloc.h			\
+	lib/rcptid.h			\
 	lib/scratch-buffers.h		\
 	lib/serialize.h			\
 	lib/service-management.h	\
+	lib/state.h			\
 	lib/stats.h			\
 	lib/stats-timer.h		\
 	lib/str-format.h		\
+	lib/stringutils.h       \
 	lib/syslog-names.h		\
 	lib/syslog-ng.h			\
 	lib/tags.h			\
@@ -134,6 +153,7 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/logmatcher.c		\
 	lib/logmpx.c			\
 	lib/logmsg.c			\
+	lib/logmsg-serialize.c			\
 	lib/logpipe.c			\
 	lib/logqueue.c			\
 	lib/logqueue-fifo.c		\
@@ -153,18 +173,23 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/ml-batched-timer.c		\
 	lib/msg-format.c		\
 	lib/nvtable.c			\
+	lib/nvtable-serialize.c			\
+	lib/nvcontainer.c			\
 	lib/parse-number.c		\
 	lib/persist-state.c		\
 	lib/plugin.c			\
 	lib/poll-events.c		\
 	lib/poll-fd-events.c		\
 	lib/pragma-parser.c		\
+	lib/rcptid.c			\
 	lib/reloc.c			\
 	lib/scratch-buffers.c		\
 	lib/serialize.c			\
 	lib/service-management.c	\
+	lib/state.c			\
 	lib/stats.c			\
 	lib/stats-timer.c		\
+	lib/stringutils.c	\
 	lib/str-format.c		\
 	lib/syslog-names.c		\
 	lib/tags.c			\
@@ -218,6 +243,10 @@ if IVYKIS_INTERNAL
 lib/ivykis/ ivykis: lib/ivykis/src/libivykis.la
 endif
 
-.PHONY: lib/ libsyslog-ng ivykis lib/ivykis/
+if JSON_INTERNAL
+lib/jsonc/ jsonc: lib/jsonc/libjson-c.la
+endif
+
+.PHONY: lib/ libsyslog-ng ivykis lib/ivykis/ lib/jsonc/ jsonc
 
 include lib/tests/Makefile.am
