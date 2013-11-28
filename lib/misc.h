@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+
 /* functions that should be implemented by GLib but they aren't */
 GString *g_string_assign_len(GString *s, const gchar *val, gint len);
 void g_string_steal(GString *s);
@@ -87,5 +88,7 @@ void string_list_free(GList *l);
   } while (0)
 
 gchar *utf8_escape_string(const gchar *str, gssize len);
+
+size_t path_get_max_len();
 
 #endif

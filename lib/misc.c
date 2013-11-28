@@ -41,6 +41,8 @@
 #include <time.h>
 #include <stdio.h>
 #include <signal.h>
+#include <limits.h>
+#include <unistd.h>
 
 GString *
 g_string_assign_len(GString *s, const gchar *val, gint len)
@@ -377,4 +379,24 @@ utf8_escape_string(const gchar *str, gssize len)
   *(res_pos++) = '\0';
 
   return res;
+}
+
+#ifdef PATH_MAX
+static const size_t max_len = PATH_MAX;
+#else
+static const size_t max_len = 0;
+#endif
+#define _PATH_MAX 1024
+
+size_t path_get_max_len()
+{
+  size_t len = max_len;
+
+  if (len != 0)
+    return len;
+
+  if ((len = pathconf("/", _PC_PATH_MAX)) <= 0)
+    len = _PATH_MAX;
+
+  return len;
 }
