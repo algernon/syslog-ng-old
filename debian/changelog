@@ -1,3 +1,11 @@
+syslog-ng (3.4.7-1~mhp1) unstable; urgency=medium
+
+  [ Gergely Nagy <algernon@madhouse-project.org> ]
+  * New upstream release.
+    + Based on 3.4/master, to include bison3 fixes.
+
+ -- Gergely Nagy <algernon@madhouse-project.org>  Wed, 25 Dec 2013 15:37:36 +0100
+
 syslog-ng (3.4.6-1~mhp1) unstable; urgency=low
 
   [ Gergely Nagy <algernon@madhouse-project.org> ]
